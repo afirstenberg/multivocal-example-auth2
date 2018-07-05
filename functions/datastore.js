@@ -7,6 +7,9 @@ var saveUser = function( id, tokens, profile ){
   var dbPath = db.ref('user').child(id);
   var obj = {};
   if( tokens ){
+    if( !tokens['expires_after'] ){
+      tokens['expires_after'] = Date.now() + (tokens['expires_in'] * 1000);
+    }
     obj.tokens = tokens;
   }
   if( profile ){
