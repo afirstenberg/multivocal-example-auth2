@@ -8,6 +8,15 @@ var enResponse = {
       Template: {
         Ssml: "Before we begin, I need you to log in on the website.",
         Text: "Before we begin, I need you to log in at {{Config.Setting.website}}.",
+        Option: {
+          Type: "Carousel",
+          Items: [
+            {
+              Body: "Log in on the website",
+              Url: "{{Config.Setting.website}}"
+            }
+          ]
+        }
       }
     }
   ],
