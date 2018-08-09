@@ -1,5 +1,5 @@
 const Multivocal = require('multivocal');
-const AuthCode = require('./authCode')
+const AuthCode = require('./authCode');
 
 require('./config.js').init();
 
