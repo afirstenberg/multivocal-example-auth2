@@ -335,10 +335,79 @@ You may have noticed that the configuration setting for the website URL isn't
 in the `config.js` file itself. Instead, we include it as part of the
 Firebase configuration. Unless otherwise configured the Firebase-based
 configuration uses the structure underneath the `multivocal` top level entry.
+In our case, we have everything under the `Setting` hierarchy, since everything
+we're putting here is a setting
 
+![Firebase db multivocal hierarcy](docs/firebase-db-multivocal.png)
 
+The `Requirements/Auth` path contains the same setting that we had in our
+"auth1" example - the `aud` string that must match a particular `iss` domain.
+However, Firebase db doesn't allow certain characters in a key - particularly
+the period and forward slash (. and / respecitively), so we have to use an
+underscore and vertical bar (_ and |) and multivocal's configuration changes
+them when we read it in. This `aud` string comes from the Client ID we get from
+setting up Account Linking in the Actions console. (If you're observant,
+you'll also note that on the Cloud Console Credentials page, this same Client
+ID is for the credentials named "New Actions on Google App".)
 
-// TODO: Continue here
+We use the `codeExchange` portion of the setting to contain information that
+is used when we exchange a refresh token for a fresh auth token. This includes
+the client ID and client secret that are associated with the Web Client, which
+you can again find on the Cloud Console Credentials page. The `redirectUri`
+and `uri` settings are pretty standard, but we include them as settings in case
+we need to change them in the future.
+
+The `uri` for `userinfo` is the same - this is a pretty standard URL, but we'll
+make it configurable just in case.
+
+Finally, the `website` needs to be our own website - we use this in the
+template we have in `config.js` to direct users to log in on the website.
 
 ## Trying it out
 
+Once we've deployed the code, and possibly activated a test through the
+simulator, we can test it out on our phone. (You can try testing it out on
+a speaker, but it will just ask you to visit the website without giving you
+much additional information. A better version of this might make sure we have
+a mobile device and redirect us to that device.)
+
+![Starting the Action](docs/demonstration-1.png)
+
+Since we don't have the account linked yet, it prompts us to visit the website
+and provides a direct link there. If we click on that "Visit" prompt...
+
+![Prompted to Sign In](docs/demonstration-2.png)
+
+We'll get the page on our website, including the button that is prompting
+us to sign in. Which we do...
+
+![Warning](docs/demonstration-3.png)
+
+We're greeted with this stern warning that our app hasn't been verified yet,
+which it hasn't. As we go to production, we'll need to have Google verify that
+we're legitimate and not trying to pretend to be Google, trying to trick
+our uses. We will click on the "Show Advanced" link which gives us a link
+at the bottom to "Go to" our app. We'll click this, keeping in mind that
+we should get our app verified so we don't see this screen in the future.
+
+![Permission screen](docs/demonstration-4.png)
+
+Google will then ask the user if our app has permission to access the 
+information described. Hopefully, the user will touch the Allow button.
+
+![Back to our website](docs/demonstration-5.png)
+
+Which will bring us back to our website. Behind the scenes, the page will
+receive a one-time code, and will send this to the server, which does the
+work of getting the tokens we need, getting our profile, and all the stuff
+we discussed above. Once everything is good, we'll get a link back to the
+Action.
+
+![Restarting the Action](docs/demonstration-6.png)
+
+The Action will automatically start from the link, get the information we've
+permitted it to, and tell us how many files there are (or if there are too
+many to count).
+
+Future times that we start the action will also just work. Unless the user
+revokes our permission, we won't have to go through this process again.
