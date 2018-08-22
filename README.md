@@ -57,6 +57,66 @@ store these tokens in a Firebase database.
 
 ### public/index.html
 
+We're going to use a fairly basic HTML file on our website, but won't go over
+all the details of the page. While you can use
+this page as a foundation, you'll probably want to dress it up to include
+things such as your privacy policy (which Google requires). 
+
+Before we get to the Javascript, let's skip to the bottom to look at the 
+document body. We include three
+blocks which will be shown or hidden based on where the user is during the 
+login process.
+
+```
+  <body>
+  <h1>Multivocal Example Auth2</h1>
+
+  <div id="g-signin2" class="g-signin2"></div>
+  <div id="working">Working...</div>
+  <div id="link-action">You're all set! <a href="">Return to Action</a></div>
+
+  </body>
+```
+
+The `g-signin2` area will contain the button that Google's code will add,
+while the `working` and `link-action` blocks start out hidden, and will be
+shown at various points in our code.
+
+Speaking of our code - what is it doing, anyway?
+
+We start out by loading JQuery (because it makes a few things a touch easier)
+and some Firebase functions. We'll also use the automatic Firebase configuration
+that we can load
+
+```
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.8.2/jquery.min.js"></script>
+
+    <script src="/__/firebase/5.1.0/firebase-app.js"></script>
+    <script src="/__/firebase/5.1.0/firebase-database.js"></script>
+    <script src="/__/firebase/init.js"></script>
+```
+
+Once these are loaded, the script starts out by loading the configuration
+from the Firebase database and saving it to use at other points in the script.
+
+```
+      var database = firebase.database();
+      var conf;
+      database.ref('/web').once('value').then(function(snapshot){
+        var config = snapshot.val();
+        console.log('config',config);
+        conf = config;
+
+        // Set the link to the Action
+        $('#link-action a').attr('href',conf.action.uri);
+
+        return config;
+```
+
+Once the configuration has been loaded, it turns some of this configuration
+into HTML <meta> tags.
+
+
 ### functions/authCode.js
 
 ### functions/datastore.js
