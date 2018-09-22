@@ -114,16 +114,310 @@ from the Firebase database and saving it to use at other points in the script.
 ```
 
 Once the configuration has been loaded, it turns some of this configuration
-into HTML <meta> tags.
+into HTML <meta> tags. These tags are used to configure the Sign-In button
+when we load the script from Google - which we do by adding the script tag
+as well.
 
+```
+      }).then(function(){
+        // Turn the sign-in configuration into meta tags
+        var signinConfig = conf.signin;
+        var keys = Object.keys( signinConfig );
+        for( var co=0; co<keys.length; co++ ){
+          var name = keys[co];
+          var content = signinConfig[name];
+          var tag = '<meta name="google-signin-'+name+'" content="'+content+'">';
+          console.log( tag );
+          $('head').append(tag);
+        }
 
-### functions/authCode.js
+        // Add the script tag to load the sign-in button
+        // When it is loaded, the "start" function will be called
+        tag = '<script src="https://apis.google.com/js/client:platform.js?onload=start" async defer>';
+        $('head').append(tag);
 
-### functions/datastore.js
+      });
+```
+
+Once the script loads and displays the button, it calls the `start()` function.
+
+Our `start()` function is a little convoluted.We need to remove the normal
+click handler, which starts to get the user's permission, with our own click
+handler. That click handler gets the user's permissions that we want, but also
+gets permission to do offline access, which will allow us to get a *refresh
+token* as well.
+
+When the user clicks the button now, it will pop up a window to get permission.
+Once the user has given permission to access the scopes (and access it offline),
+the `onSignIn()` method will be called.
+
+```
+      // Called when the sign-in button has been loaded
+      function start(){
+        console.log('start');
+        // Remove the existing callback and add our own to initiate a login
+        // with offline access
+        $('#g-signin2').children().prop('onclick',null).on('click');
+        $('#g-signin2').click(function(){
+          console.log( 'click' );
+
+          // When clicked, get the auth instance for the user,
+          // request offline access, and call the onSignIn() function
+          // when they've signed in and granted permission.
+          var auth2 = gapi.auth2.getAuthInstance();
+          auth2.then(function(){
+            console.log( 'initialized' );
+            return auth2.grantOfflineAccess();
+          }).then(onSignIn);
+        });
+      }
+```
+
+The `onSignIn()` method is called with an object containing information about
+the user, including the *auth code*. Once we get this, we hide the sign-in
+button and show our "working" message. 
+We'll get all this information and send it
+to the `codeExchange` URL that we have in our configuration. This is one of
+the functions we have running in Firebase Cloud functions, and we cover it
+below. For now, we just needs to know that it gets the *auth code* from the
+user configuration, saves it, and then returns a success when it's done. At
+that point, the `onSuccess()` function will be called.
+
+```
+      // Once signed in, send the code to the server to exchange for the
+      // auth token and refresh token.
+      // (We can get a token from the auth instance if we need to do something
+      // from the client.)
+      function onSignIn( googleUser ) {
+        // Hide the button and show that we're still working
+        $('#g-signin2').hide(200);
+        $('#working').show(200);
+
+        // Send the code to our exchange endpoint
+        // When this is done, call onSuccess()
+        var url = conf.codeExchange.uri;
+        $.ajax({
+          type: 'POST',
+          url: url,
+          contentType: 'application/json',
+          processData: false,
+          data: JSON.stringify(googleUser),
+          success: onSuccess
+        });
+      }
+```
+
+Once the code is saved on the server, we're done and ready to return to the
+Action. We'll hide our "working" message and replace it with a link that will
+launch the Action again.
+
+```
+      // Once the code exchange has taken place
+      function onSuccess( data, status, xhr ){
+        // Hide the working button and show a link back to our Action
+        $('#working').hide(200);
+        $('#link-action').show(200);
+      }
+```
+
+Once the user clicks the link, they'll be taken back to the Action and our
+page has served its purpose.
+
+### Firebase Database: web configuration
+
+The web page makes use of a Firebase db to get some configuration information.
+It is important to realize that this information must all be public, so 
+reading it from the configuration from the datastore is fine, but it must be
+kept separate from the Multivocal configuration, which does contain
+information that users should not have access to.
+
+![Firebase db web hierarchy](docs/firebase-db-web.png)
+
+The `codeExchange.uri` setting will be set to the URL for our function that does
+the code exchange (which we're about to talk about). Once we deploy the function
+for the first time, we'll see the URL for it.
+
+We need the `action.uri` setting for the link from the page to start the
+Action back up again. We can get this from the Actions console as we described
+in the prerequisites.
+
+For the signin button, we need to set the `scope` to 
+"profile email openid https://www.googleapis.com/auth/drive.metadata.readonly",
+enumerating the scopes we need to access their profile and the metadata about
+their Google Drive files. We also need to set `client_id`, which we can get
+from the Google Cloud Console API Credentials page - we should use the
+OAuth 2.0 Client ID listed for the "Web client" that we made sure was configured
+as part of the prerequisites. 
 
 ### functions/index.js
 
-### Firebase Database: web configuration
+In one of our steps above, Google sends us some user information, including
+the *auth code*. We need to setup a Firebase Cloud Function that will
+process this. We'll use the same pattern that Multivocal uses and have most
+of the work done in a file we require
+
+```
+const AuthCode = require('./authCode');
+```
+
+and then just export this to create the function with FCF.
+
+```
+exports.code = AuthCode.exchangeWebhook;
+```
+
+Which we then need to put in another file.
+
+### functions/authCode.js
+
+The function that we export that does all the work is pretty straightforward,
+and we'll break down how most of the parts work. We'll use the same pattern that
+Multivocal uses - putting everything in an environment, which we need to 
+build first. We'll then call Google's API to convert the *auth code* into
+the *auth token* and *refresh token*, use the *auth token* to get some more
+information about the user, and then store all this in a data store to be
+used later. Finally, we'll return a message to our web page saying that
+everything is good (or not).
+
+```
+const FirebaseFunctions = require('firebase-functions');
+var exchangeWebhook = FirebaseFunctions.https.onRequest( (request,response) => {
+  return buildEnv( request, response )
+    .then( env => loadTokens( env ) )
+    .then( env => loadUserinfo( env ) )
+    .then( env => saveUser( env ) )
+    .then( env => returnResult( env ) )
+    .catch( err => returnError( response, err ) );
+});
+
+exports.exchangeWebhook = exchangeWebhook;
+```
+
+Building the environment in `buildEnv()` is pretty straightforward. We're just
+making an object with the request and response objects, along with the body
+of the request and the code. We're also loading the configuration that
+Multivocal has loaded - we might as well take advantage of it for any settings
+we are making.
+
+```
+var buildEnv = function( request, response ){
+
+  return Multivocal.getConfig()
+    .then( config => {
+      console.log('config',config);
+      var env = {
+        Config: config,
+        Request:  request,
+        Response: response,
+        Body: request.body,
+        code: request.body.code
+      };
+      return Promise.resolve( env );
+    });
+};
+```
+
+Converting the code into tokens requires us to call Google's code exchange
+endpoint with the code, along with our client ID, client secret, and the
+redirect URI that we have registered with Google through the Cloud Console
+above. All of these are stored in our settings (which we discuss later).
+We'll get back a JSON object that includes token information that we'll
+save in our environment.
+
+```
+var loadTokens = function( env ){
+
+  var settings = env.Config.Setting.codeExchange;
+
+  var body = {
+    code:          env.code,
+    client_id:     settings.clientId,
+    client_secret: settings.clientSecret,
+    redirect_uri:  settings.redirectUri,
+    grant_type:    settings.grantType || 'authorization_code'
+  };
+
+  var options = {
+    method: 'POST',
+    uri:    settings.uri,
+    form:   body,
+    json:   true
+  };
+
+  return rp( options )
+    .then( tokens => {
+      env.tokens = tokens;
+      return Promise.resolve( env );
+    });
+};
+```
+
+With the *auth token*, we can get the profile about this user from Google's
+"userinfo" endpoint. Again, we'll store their profile and id in our environment.
+
+```
+var loadUserinfo = function( env ){
+  var settings = env.Config.Setting.userinfo;
+
+  var accessToken = env.tokens['access_token'];
+
+  var options = {
+    method: 'GET',
+    uri:    settings.uri,
+    headers: {
+      "Authorization": `Bearer ${accessToken}`
+    },
+    json: true
+  };
+
+  return rp( options )
+    .then( profile => {
+      console.log('profile',profile);
+      env.profile = profile;
+      env.id = profile.id;
+      return Promise.resolve( env );
+    });
+
+};
+```
+
+We then save this information into the datastore (which we cover in the next
+section) and send back a JSON response to the user.
+
+### functions/datastore.js
+
+The `saveUser()` function takes the user ID, optionally the tokens, and
+optionally the profile of the user and saves them in our data store. In this
+case, we'll use the Firebase database, since we're also using that for other
+parts of the project.
+
+Mostly, we just put these into an object and update the Firebase db at the
+path `user/ID` with this object. This update doesn't clear out anything that
+isn't set in the update object, so it is safe to include just some parts.
+
+The only real difference is that we supplement the token information. The 
+token info that comes from Google includes a field `expires_in`, which
+indicates how many seconds the token is good for. We use this to compute
+an `expires after` time which we save.
+
+```
+var saveUser = function( id, tokens, profile ){
+  console.log('datastore id',id);
+  var dbPath = db.ref('user').child(id);
+  var obj = {};
+  if( tokens ){
+    if( !tokens['expires_after'] ){
+      tokens['expires_after'] = Date.now() + (tokens['expires_in'] * 1000);
+    }
+    obj.tokens = tokens;
+  }
+  if( profile ){
+    obj.profile = profile;
+  }
+  return dbPath.update( obj );
+};
+exports.saveUser = saveUser;
+```
 
 ## Write and Configure the Action
 
