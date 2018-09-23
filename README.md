@@ -37,13 +37,169 @@ familiar, but we have a few more settings to deal with.)
      `git clone https://github.com/afirstenberg/multivocal-example-auth2.git`
 
      
-### Setup Actions on Google
+### Setup Actions on Google and Dialogflow
 
-### Setup Google Cloud API Credentials
+There are a few things we'll need to configure in both the Actions on Google
+console and in the Dialogflow console.
+
+#### Load Multivocal Intents into Dialogflow
+
+Make sure you have already loaded the multivocal standard intents. We need
+to do this now because we need the Welcome Intent to be defined for our next
+step.
+
+Unlike some of our previous examples, we won't be defining any additional
+Intents.
+
+#### Enable Linking for the Welcome Intent
+
+The authorization process mostly takes place on a web page, since OAuth
+authorization requires the user to grant permission through a web page.
+
+Once that is complete, we'll have the user re-launch our Action by clicking
+on a link. But we need to enable linking in the Action console and get the
+URL that they will link to.
+
+1. In the Actions on Google console, select Actions in the left navigation.
+
+2. Select the "welcome" Intent.
+
+    ![Actions list](docs/action-url-1.png)
+
+3. Scroll down to the "Links" section and expand it by clicking on the header.
+
+4. Enable a URL by turning on the switch.
+
+5. Enter a required (but unused) Link title.
+
+6. You'll see an HTML code snippet underneath. You will be entering just the
+    URL for this code snippet in the configuration later.
+    
+    ![Enabling URL linking](docs/action-url-2.png)
+
+#### Setup Google Sign In for Assistant
+
+We will use the same configuration we did in the auth1 example.
+
+1. In the Actions on Google console, you'll select the Account linking
+    left navigation (possibly scrolling to the bottom to get to it).
+    
+    ![Account linking](docs/action-linking-1.png)
+    
+2. Expand the Account Creation section and set "Yes, allow users to sign up for 
+    new accounts via voice".
+    
+    ![Account Creation](docs/action-linking-2.png)
+    
+3. Expand the Linking Type section and make sure that "Google Sign In"
+    is selected.
+    
+    ![Linking type](docs/action-linking-3.png)
+    
+4. Expand the Client Information section. You will see a Client ID field with
+    information you'll need to add to your multivocal configuration.
+    
+    ![Client Information](docs/action-linking-4.png)
 
 ### Setup Google Cloud API Library Access
 
+Since our webhook will query information in Google Drive, we will need to get
+permission for our project to access the Drive API. We will do this through
+the [Google Cloud Console](https://console.cloud.google.com/).
+
+1. Make sure your current project is selected.
+
+2. Select the "hamburger" icon in the upper left to bring up the menu.
+
+3. Select the "APIs & Services" menu item and then "Library"
+
+    ![Cloud console menu](docs/cloud-library-1.png)
+
+4. There will be a screen welcoming you to the new API Library. In the 
+    "Search for APIs & Services" box, type "drive".
+    
+    ![Search for APIs](docs/cloud-library-2.png)
+
+5. The screen will update as you type, leaving you with just a few choices.
+    Select the "Google Drive API" box.
+    
+    ![Select Google Drive](docs/cloud-library-3.png)
+
+6. It will confirm the API you've chosen. Select the "Enable" button.
+
+    ![Enable Google Drive](docs/cloud-library-4.png)
+
+
+### Setup Google Cloud API Credentials
+
+Since we also need to get credentials for the web client and the Action to
+access the API, we will setup two OAuth2 credentials.
+
+Both of them *should* have already been created for us. The web client
+credentials are created when we create the project, while the Action credentials
+are created when we turn on Google Sign In for Assistant. We will need the
+value of the Client ID later, so to view the credentials:
+
+1. Select the "hamburger" icon in the upper left to bring up the menu.
+
+2. Select the "APIs & Services" menu item and then "Credentials"
+
+    ![Cloud console menu](docs/cloud-credentials-1.png)
+
+3. You should see a list of credential types. In the "OAuth 2.0 client IDs"
+    section, there will be a "Client ID" column. There will also be two rows:
+    one for an Actions on Google App, and one for a Web client. You will need
+    these value for the configuration later.
+    
+    ![Client IDs](docs/cloud-credentials-2.png)
+
+4. The web client should be locked down to just the domain that our web page
+    will be running on. During testing, this may be localhost, or an ngrok
+    proxy URL, but in production it will likely be the domain provided by
+    Firebase Hosting.
+    
+    To add these as authorized pages, we need to click on the pencil on the
+    Web client row.
+    
+    ![Edit client](docs/cloud-credentials-3.png)
+
+5. We can then add the valid origins, one per line. We do not need to add
+    the Redirect URIs. Once we've added all the origins, we can click Save.
+
+    ![Add valid origins](docs/cloud-credentials-4.png)
+
 ### Setup Firebase Database
+
+We are using the Firebase Database to store the Multivocal configuration, the
+web page configuration, and the list of users. Since users should not be
+allowed to write to any of these nodes, and should only be able to read the
+web configuration, we need to install some database rules. These are in the
+`dataabse.rules.json` file:
+
+```
+{
+  "rules": {
+    "web": {
+      ".read":  true,
+      ".write": false
+    },
+    "multivocal": {
+      ".read":  false,
+      ".write": false
+    },
+    "user": {
+      ".read":  false,
+      ".write": false
+    }
+  }
+}
+```
+
+we can load them into Firebase using the following command line:
+
+```
+firebase deploy --only database
+```
 
 ## Create a Login Web Page
 
