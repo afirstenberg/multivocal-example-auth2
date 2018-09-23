@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>multivocal-example-auth2</title>
+
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.8.2/jquery.min.js"></script>
+
+    <script src="/__/firebase/5.1.0/firebase-app.js"></script>
+    <script src="/__/firebase/5.1.0/firebase-database.js"></script>
+    <script src="/__/firebase/init.js"></script>
+
+    <script>
+
+      // Get the configuration from the firebase database
+      // under the /web path.
+      var database = firebase.database();
+      var conf;
+      database.ref('/web').once('value').then(function(snapshot){
+        var config = snapshot.val();
+        console.log('config',config);
+        conf = config;
+
+        // Set the link to the Action
+        $('#link-action a').attr('href',conf.action.uri);
+
+        return config;
+
+      }).then(function(){
+        // Turn the sign-in configuration into meta tags
+        var signinConfig = conf.signin;
+        var keys = Object.keys( signinConfig );
+        for( var co=0; co<keys.length; co++ ){
+          var name = keys[co];
+          var content = signinConfig[name];
+          var tag = '<meta name="google-signin-'+name+'" content="'+content+'">';
+          console.log( tag );
+          $('head').append(tag);
+        }
+
+        // Add the script tag to load the sign-in button
+        // When it is loaded, the "start" function will be called
+        tag = '<script src="https://apis.google.com/js/client:platform.js?onload=start" async defer>';
+        $('head').append(tag);
+
+      });
+
+      // Called when the sign-in button has been loaded
+      function start(){
+        console.log('start');
+        // Remove the existing callback and add our own to initiate a login
+        // with offline access
+        $('#g-signin2').children().prop('onclick',null).on('click');
+        $('#g-signin2').click(function(){
+          console.log( 'click' );
+
+          // When clicked, get the auth instance for the user,
+          // request offline access, and call the onSignIn() function
+          // when they've signed in and granted permission.
+          var auth2 = gapi.auth2.getAuthInstance();
+          auth2.then(function(){
+            console.log( 'initialized' );
+            return auth2.grantOfflineAccess();
+          }).then(onSignIn);
+        });
+      }
+
+      // Once signed in, send the code to the server to exchange for the
+      // auth token and refresh token.
+      // (We can get a token from the auth instance if we need to do something
+      // from the client.)
+      function onSignIn( googleUser ) {
+        // Hide the button and show that we're still working
+        $('#g-signin2').hide(200);
+        $('#working').show(200);
+
+        // Send the code to our exchange endpoint
+        // When this is done, call onSuccess()
+        var url = conf.codeExchange.uri;
+        $.ajax({
+          type: 'POST',
+          url: url,
+          contentType: 'application/json',
+          processData: false,
+          data: JSON.stringify(googleUser),
+          success: onSuccess
+        });
+      }
+
+      // Once the code exchange has taken place
+      function onSuccess( data, status, xhr ){
+        // Hide the working button and show a link back to our Action
+        $('#working').hide(200);
+        $('#link-action').show(200);
+      }
+    </script>
+
+    <style>
+      #working {
+        display: none
+      }
+      #link-action {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+  <h1>Multivocal Example Auth2</h1>
+
+  <!-- https://developers.google.com/identity/sign-in/web/server-side-flow#step_4_add_the_sign-in_button_to_your_page -->
+  <!-- This turns into a button after configuration -->
+  <div id="g-signin2" class="g-signin2"></div>
+
+  <!-- Starts hidden. -->
+  <div id="working">Working...</div>
+
+  <!-- Starts hidden and without the URL. That is added after configuration -->
+  <div id="link-action">You're all set! <a href="">Return to Action</a></div>
+
+  </body>
+</html>

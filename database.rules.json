@@ -1,0 +1,16 @@
+{
+  "rules": {
+    "web": {
+      ".read":  true,
+      ".write": false
+    },
+    "multivocal": {
+      ".read":  false,
+      ".write": false
+    },
+    "user": {
+      ".read":  false,
+      ".write": false
+    }
+  }
+}
